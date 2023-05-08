@@ -1,0 +1,84 @@
+<html>
+<head>
+<title>CODE</title>
+<style>
+</style>
+<script type="text/javascript">
+<!--
+
+// stores an int (which can be as big as, but not including, Number.MAX_SAFE_INTEGER)
+// negative 0 is allowed
+class Int {
+	max = Number.MAX_SAFE_INTEGER;
+	constructor(str) {
+		this.negative = false;
+		if (str.startsWith("-")) {
+			this.negative = true;
+			str = str.substr(1);
+		}
+		this.abs = parseInt(str); // should be positive
+		// on error, make it negative one in the hope somebody will do error checking
+		if (this.abs > this.max || isNaN(this.abs)) {
+			this.abs = -1;
+		}
+	}
+	
+	toString() {
+		var sign = "";
+		if (this.negative) sign = "-";
+		if (Object.is(this.abs, -0)) {
+			// javascript treats -0 the same as 0 for some reason
+			return sign + "-0";
+		} else {
+			return sign + this.abs;
+		}
+	}
+}
+
+function run() {
+	var code = document.getElementById('in').value.split("\n");
+	document.getElementById('out').innerHTML = "";
+	
+	var valid_types = ["int", "string"]; // , "function", "conf", "array"];
+	
+	var variables = {}; // map from variable name to [type, value]
+	
+	for (i in code) {
+		var line = code[i];
+		var evaluated = false; // evaluate each line only once
+		
+		// print the variable if it exists
+		if (line.startsWith("print ")) {
+			var varname = line.substr(6);
+			if (varname in variables) {
+				document.getElementById('out').innerHTML += variables[varname][1].toString() + "\n";
+				evaluated = true;
+			}
+		}
+		
+		// the equals operator
+		if (!evaluated && line.indexOf(" = ") > -1) {
+			var lhs = line.substr(0, line.indexOf(" = "));
+			var rhs = line.substr(line.indexOf(" = ") + 3);
+			if (valid_types.includes(rhs)) {
+				variables[lhs] = [rhs, undefined];
+			} else if (lhs in variables && valid_types.includes(variables[lhs][0])) {
+				// set the variable to rhs
+				if (variables[lhs][0] == "int") {
+					variables[lhs][1] = new Int(rhs);
+				} else if (variables[lhs][0] == "string") {
+					variables[lhs][1] = rhs;
+				}
+			}
+		}
+	}
+}
+// -->
+</script>
+</head>
+<body>
+<textarea id="in" cols=100 rows=20>Code goes here!</textarea><br>
+<input type="submit" onclick="run()" /><br><br>
+<div id="out">
+</body>
+</html>
