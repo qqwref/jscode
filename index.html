@@ -6,11 +6,115 @@
 <script type="text/javascript">
 <!--
 
+var valid_types = ["int", "string", "bool", "function"]; // , "conf", "array"];
+
+var variables = {}; // map from variable name to [type, value]
+
+var builtins = {}; // built-in functions
+
+// get the two parts of a string on each side of some operator
+function splitStringAround(str, op) {
+	var index = str.indexOf(op);
+	if (index == -1) {
+		return [str, ""];
+	} else {
+		return [str.substr(0, index), str.substr(index + op.length)];
+	}
+}
+
+// builtin: get input from user as a string
+function input() {
+	return new String(prompt('CODE is requesting input'));
+}
+builtins["input"] = input;
+
+// builtin: flip a coin
+function flipACoin() {
+	return new Bool(Math.random() > 0.5 ? "true" : "false");
+}
+builtins["flip a coin"] = flipACoin;
+
+function equals(a, b) {
+	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
+		if (a.abs == b.abs && a.negative == b.negative) {
+			return new Bool("true");
+		}
+	}
+	else if (a.constructor.name == "String" && b.constructor.name == "String") {
+		if (a.value == b.value) {
+			return new Bool("true");
+		}
+	}
+	else if (a.constructor.name == "Bool" && b.constructor.name == "Bool") {
+		if (a.value == b.value) {
+			return new Bool("true");
+		}
+	}
+	return new Bool("false");
+}
+
+function plus(a, b) {
+	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
+		if (a.negative == b.negative) {
+			return new Integer("", a.negative, a.abs + b.abs);
+		} else {
+			var negative = (a.negative && a.abs >= b.abs) || (!a.negative && a.abs < b.abs);
+			var abs = a.abs - b.abs;
+			if (abs < 0) abs = -abs;
+			return new Integer("", negative, abs);
+		}
+	}
+	else if (a.constructor.name == "String" || b.constructor.name == "String") {
+		return a.toString() + b.toString();
+	}
+	return new Integer("-1");
+}
+
+function minus(a, b) {
+	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
+		var negb = new Integer("", !b.negative, b.abs);
+		return plus(a, negb);
+	}
+	return new Integer("-1");
+}
+
+function lt(a, b) {
+	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
+		if (a.negative && b.negative && a.abs > b.abs) {
+			return new Bool("true");
+		} else if (!a.negative && !b.negative && a.abs < b.abs) {
+			return new Bool("true");
+		} else if (a.negative && !b.negative) {
+			return new Bool("true");
+		}
+	}
+	else if (a.constructor.name == "String" && b.constructor.name == "String") {
+		if (a.value < b.value) {
+			return new Bool("true");
+		}
+	}
+	else if (a.constructor.name == "Bool" && b.constructor.name == "Bool") {
+		if (a.value == "false" && b.value == "true") {
+			return new Bool("true");
+		}
+	}
+	return new Bool("false");
+}
+
+function gt(a, b) {
+	return lt(b, a);
+}
+
 // stores an int (which can be as big as, but not including, Number.MAX_SAFE_INTEGER)
 // negative 0 is allowed
 class Int {
 	max = Number.MAX_SAFE_INTEGER;
-	constructor(str) {
+	constructor(str, negative=undefined, abs=undefined) {
+		if (negative !== undefined && abs !== undefined) {
+			this.negative = negative;
+			this.abs = abs;
+			return;
+		}
 		this.negative = false;
 		if (str.startsWith("-")) {
 			this.negative = true;
@@ -33,44 +137,201 @@ class Int {
 			return sign + this.abs;
 		}
 	}
+	
+	parenOperator() {
+		return new Int("", !this.negative, this.abs);
+	}
+}
+
+// your boring old string class
+class String {
+	constructor(str) {
+		this.value = str;
+	}
+	
+	toString() {
+		return this.value;
+	}
+	
+	parenOperator() {
+		return eval(this.value);
+	}
+}
+
+// stores a boolean, which can be true, false, or neither
+class Bool {
+	constructor(str) {
+		if (str.toLowerCase().startsWith("t")) {
+			this.value = "true";
+		} else if (str.toLowerCase().startsWith("f")) {
+			this.value = "false";
+		} else {
+			this.value = "neither";
+		}
+	}
+	
+	toString() {
+		return this.value;
+	}
+	
+	parenOperator() {
+		if (this.value == "true") {
+			return new Bool("false");
+		} else if (this.value == "false") {
+			return new Bool("true");
+		} else {
+			return new Bool("neither");
+		}
+	}
+}
+
+class Function {
+	constructor() {
+		this.code = []
+	}
+	
+	add(str) {
+		this.code += str;
+	}
+	
+	toString() {
+		return this.code.join("\n");
+	}
+	
+	parenOperator() {
+		if (this.value == "true") {
+			return new Bool("false");
+		} else if (this.value == "false") {
+			return new Bool("true");
+		} else {
+			return new Bool("neither");
+		}
+	}
+	
+	eval() {
+		for (i in this.code) {
+			eval(code[i]);
+		}
+	}
+	
+	toString() {
+		return this.value;
+	}
+	
+	parenOperator() {
+		return this; // can we do anything fun with this? actually it may not be possible to ever do any operator on a raw function anyway, since it'll always get evaluated
+	}
+}
+
+function eval(line) {
+	var evaluated = false; // evaluate each line only once
+	
+	// https://www.adl.org/resources/hate-symbol/echo
+	// todo add more hate symbols
+	if (new RegExp('/\(\(\(.*\)\)\)/').test(line)) {
+		console.log("No hate symbols please");
+		evaluated = true;
+	}	
+		
+	// print something
+	if (line.startsWith("print ")) {
+		var printed_expr = parseExpression(line.substr(6));
+		document.getElementById('out').innerHTML += printed_expr.toString() + "\n";
+		evaluated = true;
+	}
+	
+	// the equals operator
+	if (!evaluated && line.indexOf(" = ") > -1) {
+		var [lhs, rhs] = splitStringAround(line, " = ");
+		if (valid_types.includes(rhs)) {
+			variables[lhs] = [rhs, undefined];
+			evaluated = true;
+		} else if (lhs in variables && valid_types.includes(variables[lhs][0])) {
+			// set the variable to rhs
+			if (variables[lhs][0] == "int") {
+				var parsedRhs = parseExpression(rhs)
+				variables[lhs][1] = new Int(parsedRhs);
+			} else if (variables[lhs][0] == "string") {
+				var parsedRhs = parseExpression(rhs)
+				variables[lhs][1] = new String(parsedRhs);
+			} else if (variables[lhs][0] == "bool") {
+				var parsedRhs = parseExpression(rhs)
+				variables[lhs][1] = new Bool(parsedRhs);
+			} else if (variables[lhs][0] == "function") {
+				// don't parse, just set the string
+				if (variables[lhs][1] === undefined) {
+					variables[lhs][1] = new Function(rhs);
+				}
+				variables[lhs][1].add(rhs);
+			}
+			evaluated = true;
+		}
+	}
+	
+	// just parse it, it might do something
+	if (!evaluated) {
+		parseExpression(line);
+	}
+	
+	// todo: handle if statements by checking if this line should be parsed or not
+}
+
+// parse an expression and return its value
+// the result should be one of our objects
+function parseExpression(str) {
+	console.log(str);
+	if (str.startsWith("(") && str.endsWith(")")) {
+		var inner = str.substring(1, s.length - 1)
+		return parseExpression(inner).parenOperator();
+	} else if (str.startsWith('"') && str.endsWith('"')) {
+		var inner = str.substring(1, s.length - 1)
+		return new String(inner);
+	} else if (str.indexOf(" = ") > -1) {
+		var [lhs, rhs] = splitStringAround(line, " = ");
+		return equals(parseExpression(lhs), parseExpression(rhs));
+	} else if (str.indexOf(" + ") > -1) {
+		var [lhs, rhs] = splitStringAround(line, " + ");
+		return plus(parseExpression(lhs), parseExpression(rhs));
+	} else if (str.indexOf(" - ") > -1) {
+		var [lhs, rhs] = splitStringAround(line, " - ");
+		return minus(parseExpression(lhs), parseExpression(rhs));
+	} else if (str.indexOf(" < ") > -1) {
+		var [lhs, rhs] = splitStringAround(line, " < ");
+		return lt(parseExpression(lhs), parseExpression(rhs));
+	} else if (str.indexOf(" > ") > -1) {
+		var [lhs, rhs] = splitStringAround(line, " > ");
+		return gt(parseExpression(lhs), parseExpression(rhs));
+	}
+	// todo: times, divided by, and, or
+
+	// try evaluating the string as a variable/function/builtin
+	if (str in builtins) {
+		return builtins[str]();
+	}
+	if (str in variables) {
+		var result = variables[str][1];
+		if (result.constructor.name == "Function") {
+			return result.eval();
+		} else {
+			return result;
+		}
+	}
+	// try parsing
+	if (str.toLowerCase() == "true" || str.toLowerCase() == "false") {
+		return new Bool(str);
+	}
+	if (new RegExp('/^\-*\d+$/').test(str)) {
+		return new Int(str);
+	}
+	return new String(str);
 }
 
 function run() {
 	var code = document.getElementById('in').value.split("\n");
 	document.getElementById('out').innerHTML = "";
 	
-	var valid_types = ["int", "string"]; // , "function", "conf", "array"];
-	
-	var variables = {}; // map from variable name to [type, value]
-	
 	for (i in code) {
-		var line = code[i];
-		var evaluated = false; // evaluate each line only once
-		
-		// print the variable if it exists
-		if (line.startsWith("print ")) {
-			var varname = line.substr(6);
-			if (varname in variables) {
-				document.getElementById('out').innerHTML += variables[varname][1].toString() + "\n";
-				evaluated = true;
-			}
-		}
-		
-		// the equals operator
-		if (!evaluated && line.indexOf(" = ") > -1) {
-			var lhs = line.substr(0, line.indexOf(" = "));
-			var rhs = line.substr(line.indexOf(" = ") + 3);
-			if (valid_types.includes(rhs)) {
-				variables[lhs] = [rhs, undefined];
-			} else if (lhs in variables && valid_types.includes(variables[lhs][0])) {
-				// set the variable to rhs
-				if (variables[lhs][0] == "int") {
-					variables[lhs][1] = new Int(rhs);
-				} else if (variables[lhs][0] == "string") {
-					variables[lhs][1] = rhs;
-				}
-			}
-		}
+		eval(code[i]);
 	}
 }
 // -->

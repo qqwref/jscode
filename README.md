@@ -5,6 +5,8 @@ CODE (short for CODE Or DiE trying) is a brand-new programming language, designe
 See the docs/ folder for details on how to write in CODE.
 
 # Versions
+Version 2.1: Implemented a better type system, booleans, functions, some operators, and two builtins.
+
 Version 2.0: Implemented variables and a print statement.
 
 Version 1.0: Implemented a README file.
