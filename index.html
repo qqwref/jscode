@@ -177,7 +177,7 @@ class Bool {
 			if (str.constructor.name == "Bool" || str.constructor.name == "String") {
 				str = str.value;
 			} else if (str.constructor.name == "Int") {
-				this.value = str.negative;
+				this.value = !str.negative;
 				return;
 			}
 		}
@@ -255,8 +255,14 @@ function eval(line) {
 		
 	// print something
 	if (line.startsWith("print ")) {
+		window.print();
 		var printed_expr = parseExpression(line.substr(6));
-		document.getElementById('out').innerHTML += printed_expr.toString() + "\n";
+		document.getElementById('out').innerHTML += printed_expr.toString() + "<br>";
+		evaluated = true;
+	}
+	if (line.startsWith("print(") && line.endsWith(")")) {
+		var printed_expr = parseExpression(line.substr(6, line.length - 7));
+		document.getElementById('out').innerHTML += printed_expr.toString() + "<br>";
 		evaluated = true;
 	}
 	
