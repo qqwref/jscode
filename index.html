@@ -56,26 +56,26 @@ function equals(a, b) {
 function plus(a, b) {
 	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
 		if (a.negative == b.negative) {
-			return new Integer("", a.negative, a.abs + b.abs);
+			return new Int("", a.negative, a.abs + b.abs);
 		} else {
 			var negative = (a.negative && a.abs >= b.abs) || (!a.negative && a.abs < b.abs);
 			var abs = a.abs - b.abs;
 			if (abs < 0) abs = -abs;
-			return new Integer("", negative, abs);
+			return new Int("", negative, abs);
 		}
 	}
 	else if (a.constructor.name == "String" || b.constructor.name == "String") {
 		return a.toString() + b.toString();
 	}
-	return new Integer("-1");
+	return new Int("-1");
 }
 
 function minus(a, b) {
 	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
-		var negb = new Integer("", !b.negative, b.abs);
+		var negb = new Int("", !b.negative, b.abs);
 		return plus(a, negb);
 	}
-	return new Integer("-1");
+	return new Int("-1");
 }
 
 function lt(a, b) {
@@ -110,6 +110,14 @@ function gt(a, b) {
 class Int {
 	max = Number.MAX_SAFE_INTEGER;
 	constructor(str, negative=undefined, abs=undefined) {
+		if (typeof str == "object") {
+			if (str.constructor.name == "Bool" || str.constructor.name == "String") {
+				str = str.value;
+			} else if (str.constructor.name == "Int") {
+				negative = str.negative;
+				abs = str.abs;
+			}
+		}
 		if (negative !== undefined && abs !== undefined) {
 			this.negative = negative;
 			this.abs = abs;
@@ -146,7 +154,11 @@ class Int {
 // your boring old string class
 class String {
 	constructor(str) {
-		this.value = str;
+		if (typeof str == "object") {
+			this.value = str.toString();
+		} else {
+			this.value = str;
+		}
 	}
 	
 	toString() {
@@ -161,6 +173,14 @@ class String {
 // stores a boolean, which can be true, false, or neither
 class Bool {
 	constructor(str) {
+		if (typeof str == "object") {
+			if (str.constructor.name == "Bool" || str.constructor.name == "String") {
+				str = str.value;
+			} else if (str.constructor.name == "Int") {
+				this.value = str.negative;
+				return;
+			}
+		}
 		if (str.toLowerCase().startsWith("t")) {
 			this.value = "true";
 		} else if (str.toLowerCase().startsWith("f")) {
@@ -228,7 +248,7 @@ function eval(line) {
 	
 	// https://www.adl.org/resources/hate-symbol/echo
 	// todo add more hate symbols
-	if (new RegExp('/\(\(\(.*\)\)\)/').test(line)) {
+	if (/\(\(\(.*\)\)\)/.test(line)) {
 		console.log("No hate symbols please");
 		evaluated = true;
 	}	
@@ -281,25 +301,25 @@ function eval(line) {
 function parseExpression(str) {
 	console.log(str);
 	if (str.startsWith("(") && str.endsWith(")")) {
-		var inner = str.substring(1, s.length - 1)
+		var inner = str.substring(1, str.length - 1)
 		return parseExpression(inner).parenOperator();
 	} else if (str.startsWith('"') && str.endsWith('"')) {
-		var inner = str.substring(1, s.length - 1)
+		var inner = str.substring(1, str.length - 1)
 		return new String(inner);
 	} else if (str.indexOf(" = ") > -1) {
-		var [lhs, rhs] = splitStringAround(line, " = ");
+		var [lhs, rhs] = splitStringAround(str, " = ");
 		return equals(parseExpression(lhs), parseExpression(rhs));
 	} else if (str.indexOf(" + ") > -1) {
-		var [lhs, rhs] = splitStringAround(line, " + ");
+		var [lhs, rhs] = splitStringAround(str, " + ");
 		return plus(parseExpression(lhs), parseExpression(rhs));
 	} else if (str.indexOf(" - ") > -1) {
-		var [lhs, rhs] = splitStringAround(line, " - ");
+		var [lhs, rhs] = splitStringAround(str, " - ");
 		return minus(parseExpression(lhs), parseExpression(rhs));
 	} else if (str.indexOf(" < ") > -1) {
-		var [lhs, rhs] = splitStringAround(line, " < ");
+		var [lhs, rhs] = splitStringAround(str, " < ");
 		return lt(parseExpression(lhs), parseExpression(rhs));
 	} else if (str.indexOf(" > ") > -1) {
-		var [lhs, rhs] = splitStringAround(line, " > ");
+		var [lhs, rhs] = splitStringAround(str, " > ");
 		return gt(parseExpression(lhs), parseExpression(rhs));
 	}
 	// todo: times, divided by, and, or
@@ -320,7 +340,7 @@ function parseExpression(str) {
 	if (str.toLowerCase() == "true" || str.toLowerCase() == "false") {
 		return new Bool(str);
 	}
-	if (new RegExp('/^\-*\d+$/').test(str)) {
+	if (/^\-*\d+$/.test(str)) {
 		return new Int(str);
 	}
 	return new String(str);
