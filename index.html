@@ -312,6 +312,17 @@ function eval(line, canBeEqualsStatement = true) {
 	// the equals operator
 	if (!evaluated && canBeEqualsStatement && line.indexOf(" = ") > -1) {
 		var [lhs, rhs] = splitStringAround(line, " = ");
+		// indirect lhs with parentheses
+		while (lhs.startsWith("(") && lhs.endsWith(")")) {
+			var inner = lhs.substring(1, lhs.length - 1)
+			console.log(variables[inner]);
+			if (inner in variables && variables[inner][0] == "string") {
+				lhs = variables[inner][1].value;
+			} else {
+				lhs = inner;
+			}
+		}
+		
 		if (valid_types.includes(rhs)) {
 			variables[lhs] = [rhs, new String("nothing")];
 			evaluated = true;
@@ -415,6 +426,18 @@ function run() {
 	var code = document.getElementById('in').value.split("\n");
 	document.getElementById('out').innerHTML = "";
 	
+	// compute goto map
+	var goto_map = {};
+	for (var i=0; i<code.length; i++) {
+		if (/^ *come from \d+$/.test(code[i])) {
+			var come_from = parseInt(code[i].trimStart().substr(10));
+			// line i+1 <- come_from
+			if (!(come_from in goto_map)) {
+				goto_map[come_from] = i+1;
+			}
+		}
+	}
+	
 	var indents = 0;
 	var next_indents = count_indents(code[0]);
 	for (var i=0; i<code.length; i++) {
@@ -436,13 +459,20 @@ function run() {
 				}
 				i = next_i - 1;
 				next_indents = count_indents(code[next_i])
-				continue;
 			}
-			
 		} else {
 			// evaluate it and continue forward
 			eval(code[i].substr(indents));
+			
+			// is there a goto?
+			if ((i+1) in goto_map) {
+				var goto_line = goto_map[i+1];
+				i = goto_line - 2;
+				next_indents = count_indents(code[goto_line - 1]);
+			}
 		}
+		
+		// todo: should we do a goto from a line that's an if statement?
 	}
 }
 // -->
