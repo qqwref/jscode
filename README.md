@@ -1,5 +1,9 @@
-# Learn to CODE!
-CODE (short for CODE Or DiE trying) is a brand-new programming language, designed to have the most user-friendly and compact syntax imaginable. For maximum flexibility, a javascript interpreter is provided, so you can write your own CODE code and run it with just a press of a button.
+![](code.png)
+
+# Learn To CODE!
+CODE (short for CODE Or DiE trying) is a brand-new programming language, designed to have the most user-friendly and compact syntax imaginable. It is inspired by some of the greatest and most widely-respected languages ever created, such as INTERCAL and PHP. For maximum flexibility, a javascript interpreter is provided, so you can write your own CODE code and run it with just a press of a button.
+
+We also have a [Rust implementation](https://github.com/benwh1/CODE)!
 
 # How?
 See the docs/ folder for details on how to write in CODE.
