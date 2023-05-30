@@ -76,6 +76,8 @@ function minus(a, b) {
 		return plus(a, negb);
 	}
 	return new Int("-1");
+	
+	// string minus string: remove first instance of 2nd string from 1st string
 }
 
 function lt(a, b) {
@@ -104,6 +106,8 @@ function lt(a, b) {
 function gt(a, b) {
 	return lt(b, a);
 }
+
+// string times int: repeat string int times, if positive. if negative, reverse it
 
 // stores an int (which can be as big as, but not including, Number.MAX_SAFE_INTEGER)
 // negative 0 is allowed
@@ -207,11 +211,11 @@ class Bool {
 
 class Function {
 	constructor() {
-		this.code = []
+		this.code = [];
 	}
 	
 	add(str) {
-		this.code += str;
+		this.code.push(str);
 	}
 	
 	toString() {
@@ -229,9 +233,44 @@ class Function {
 	}
 	
 	eval() {
-		for (i in this.code) {
-			eval(code[i]);
+		var last_line_value = new Int("-1");
+		var indents = 0;
+		var next_indents = count_indents(this.code[0]);
+		for (var i=0; i<this.code.length; i++) {
+			// move indents and next_indents forward
+			indents = next_indents;
+			if (i >= this.code.length - 1) {
+				next_indents = -1;
+			} else {
+				next_indents = count_indents(this.code[i+1]);
+			}
+			
+			if (next_indents > indents) {
+				// this is an if statement. evaluate it and convert to boolean. if it's true, continue forwards; otherwise, skip until we find another line with at most this many indents.
+				last_line_value = eval(this.code[i].substr(indents), false);
+				console.log(this.code[i].substr(indents) + " => " + last_line_value);
+				var bool_value = new Bool(last_line_value);
+				if (bool_value.value != "true") {
+					var next_i = i + 1;
+					while (next_i < this.code.length && count_indents(this.code[next_i]) > indents) {
+						next_i++;
+					}
+					i = next_i - 1;
+					if (next_i < this.code.length) {
+						next_indents = count_indents(this.code[next_i]);
+					} else {
+						next_indents = -1;
+					}
+					continue;
+				}
+				
+			} else {
+				// evaluate it and continue forward
+				last_line_value = eval(this.code[i].substr(indents));
+				console.log(this.code[i].substr(indents) + " => " + last_line_value);
+			}
 		}
+		return last_line_value;
 	}
 	
 	toString() {
@@ -243,7 +282,7 @@ class Function {
 	}
 }
 
-function eval(line) {
+function eval(line, canBeEqualsStatement = true) {
 	var evaluated = false; // evaluate each line only once
 	
 	// https://www.adl.org/resources/hate-symbol/echo
@@ -251,6 +290,7 @@ function eval(line) {
 	if (/\(\(\(.*\)\)\)/.test(line)) {
 		console.log("No hate symbols please");
 		evaluated = true;
+		return new Int(-1);
 	}	
 		
 	// print something
@@ -259,19 +299,23 @@ function eval(line) {
 		var printed_expr = parseExpression(line.substr(6));
 		document.getElementById('out').innerHTML += printed_expr.toString() + "<br>";
 		evaluated = true;
+		return printed_expr;
 	}
 	if (line.startsWith("print(") && line.endsWith(")")) {
 		var printed_expr = parseExpression(line.substr(6, line.length - 7));
+		console.log(line.substr(6, line.length - 7));
 		document.getElementById('out').innerHTML += printed_expr.toString() + "<br>";
 		evaluated = true;
+		return printed_expr;
 	}
 	
 	// the equals operator
-	if (!evaluated && line.indexOf(" = ") > -1) {
+	if (!evaluated && canBeEqualsStatement && line.indexOf(" = ") > -1) {
 		var [lhs, rhs] = splitStringAround(line, " = ");
 		if (valid_types.includes(rhs)) {
-			variables[lhs] = [rhs, undefined];
+			variables[lhs] = [rhs, new String("nothing")];
 			evaluated = true;
+			return new String(rhs);
 		} else if (lhs in variables && valid_types.includes(variables[lhs][0])) {
 			// set the variable to rhs
 			if (variables[lhs][0] == "int") {
@@ -285,18 +329,21 @@ function eval(line) {
 				variables[lhs][1] = new Bool(parsedRhs);
 			} else if (variables[lhs][0] == "function") {
 				// don't parse, just set the string
-				if (variables[lhs][1] === undefined) {
+				if (variables[lhs][1] === undefined || variables[lhs][1].constructor.name != "Function") {
 					variables[lhs][1] = new Function(rhs);
 				}
+				console.log(rhs);
+				console.log(variables[lhs][1]);
 				variables[lhs][1].add(rhs);
 			}
 			evaluated = true;
+			return variables[lhs][1];
 		}
 	}
 	
 	// just parse it, it might do something
 	if (!evaluated) {
-		parseExpression(line);
+		return parseExpression(line);
 	}
 	
 	// todo: handle if statements by checking if this line should be parsed or not
@@ -328,7 +375,7 @@ function parseExpression(str) {
 		var [lhs, rhs] = splitStringAround(str, " > ");
 		return gt(parseExpression(lhs), parseExpression(rhs));
 	}
-	// todo: times, divided by, and, or
+	// todo: times, divided by, ÷, ÷÷, and, or
 
 	// try evaluating the string as a variable/function/builtin
 	if (str in builtins) {
@@ -352,12 +399,50 @@ function parseExpression(str) {
 	return new String(str);
 }
 
+function count_indents(line) {
+	var indents = 0;
+	for (var i=0; i<line.length; i++) {
+		if (line[i] == " ") {
+			indents++;
+		} else {
+			break;
+		}
+	}
+	return indents;
+}
+
 function run() {
 	var code = document.getElementById('in').value.split("\n");
 	document.getElementById('out').innerHTML = "";
 	
-	for (i in code) {
-		eval(code[i]);
+	var indents = 0;
+	var next_indents = count_indents(code[0]);
+	for (var i=0; i<code.length; i++) {
+		// move indents and next_indents forward
+		indents = next_indents;
+		if (i >= code.length - 1) {
+			next_indents = -1;
+		} else {
+			next_indents = count_indents(code[i+1]);
+		}
+		
+		if (next_indents > indents) {
+			// this is an if statement. evaluate it and convert to boolean. if it's true, continue forwards; otherwise, skip until we find another line with at most this many indents.
+			var value = new Bool(eval(code[i].substr(indents), false));
+			if (value.value != "true") {
+				var next_i = i + 1;
+				while (next_i < code.length && count_indents(code[next_i]) > indents) {
+					next_i++;
+				}
+				i = next_i - 1;
+				next_indents = count_indents(code[next_i])
+				continue;
+			}
+			
+		} else {
+			// evaluate it and continue forward
+			eval(code[i].substr(indents));
+		}
 	}
 }
 // -->
