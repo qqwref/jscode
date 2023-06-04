@@ -9,6 +9,8 @@ We also have a [Rust implementation](https://github.com/benwh1/CODE)!
 See the docs/ folder for details on how to write in CODE.
 
 # Versions
+Version 2.1.2_math: Implemented a single convenient way to do all kinds of integer math.
+
 Version 2.1.2: Implemented come from and indirect lhs.
 
 Version 2.1.1: Implemented if statements.

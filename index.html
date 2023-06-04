@@ -34,6 +34,136 @@ function flipACoin() {
 }
 builtins["flip a coin"] = flipACoin;
 
+// builtin: math!
+function MATH(data) {
+	// calls to MATH will look like this: MATH !o#+-&!s#int&!i#b&!i#c&!i#d
+	// the instantiation is based on control flags, separated by &. each flag looks like !key#value
+	// !o - operands to use, from +-×÷^√. we will simply repeatedly take the first operation, and apply it to the first two input to get one number, then repeat until the operands are done. default: +
+	// !z - size of variable. every input and operation gets truncated to this size. supports bit, byte, short, int (2^53 or whatever). default: byte
+	// !s - sign sensitive. if false, ignores negativity. default: false
+	// !i - input variable. you can repeat this more than once. defaults: a, b, c, etc.
+	var operators_list = "+";
+	var variable_minimum = -128; // byte
+	var variable_maximum = 127; // byte
+	var sign_sensitive = false;
+	var input_variables = [];
+	
+	// parse data
+	var split_data = data.split("&");
+	for (i=0; i<split_data.length; i++) {
+		if (split_data[i].startsWith("!o#")) {
+			operators_list = split_data[i].substr(3);
+		} else if (split_data[i].startsWith("!s")) {
+			sign_sensitive = true;
+		} else if (split_data[i].startsWith("!z")) {
+			if (split_data[i] == "!z#bit") {
+				variable_minimum = 0;
+				variable_maximum = 1;
+			} else if (split_data[i] == "!z#byte") {
+				variable_minimum = -128;
+				variable_maximum = 127;
+			} else if (split_data[i] == "!z#short") {
+				variable_minimum = -32768;
+				variable_maximum = 32767;
+			} else if (split_data[i] == "!z#int") {
+				variable_minimum = -Number.MAX_SAFE_INTEGER;
+				variable_maximum = Number.MAX_SAFE_INTEGER;
+			}
+		} else if (split_data[i].startsWith("!i#")) {
+			input_variables.push(split_data[i].substr(3));
+		}
+	}
+	// use single-letter variables if any are missing
+	while (input_variables.length <= operators_list.length) {
+		input_variables.push("abcdefghijklmnopqrstuvwxyz"[input_variables.length % 26]);
+	}
+	
+	function try_get_variable(name) {
+		if (name in variables) {
+			return new Int(variables[name][1]);
+		} else {
+			return new Int("-1");
+		}
+	}
+	
+	function truncate(value) {
+		var outvalue = new Int("", value.negative, value.abs);
+		if (!sign_sensitive) {
+			outvalue.negative = false;
+			outvalue.abs = Math.abs(outvalue.abs);
+		}
+		// outvalue must be of type int
+		if (outvalue.negative && outvalue.abs > -variable_minimum) {
+			outvalue.abs = -variable_minimum;
+		} else if (!outvalue.negative && outvalue.abs < variable_minimum) {
+			outvalue.abs = variable_minimum;
+		} else if (outvalue.negative && outvalue.abs < -variable_maximum) {
+			outvalue.abs = -variable_maximum;
+		} else if (!outvalue.negative && outvalue.abs > variable_maximum) {
+			outvalue.abs = variable_maximum;
+		}
+		return outvalue;
+	}
+	
+	// do the operations
+	var current = truncate(try_get_variable(input_variables[0]));
+	for (var i=0; i<operators_list.length; i++) {
+		var operator = operators_list[i];
+		var next = truncate(try_get_variable(input_variables[i+1]));
+		
+		// handle all possible operators by updating current
+		if (operator == "+" || operator == "-") {
+			if (operator == "-") {
+				next = new Int("", !next.negative, next.abs);
+			}
+		
+			if (current.negative == next.negative) {
+				current = truncate(new Int("", current.negative, current.abs + next.abs));
+			} else {
+				var negative = (current.negative && current.abs >= next.abs) ||
+					(!current.negative && current.abs < next.abs);
+				var abs = current.abs - next.abs;
+				if (abs < 0) abs = -abs;
+				current = truncate(new Int("", negative, abs));
+			}
+		} else if (operator == "×") {
+			current = truncate(new Int("", current.negative ^ next.negative, current.abs * next.abs));
+		} else if (operator == "÷") {
+			current = truncate(new Int("", current.negative ^ next.negative, Math.floor(current.abs / next.abs)));
+		} else if (operator == "⋆") {
+			// current**next
+			if (current.negative && next.negative) {
+				current = truncate(new Int("-1"));
+			} else if (current.negative && !next.negative) {
+				current = truncate(new Int("", (next.abs % 2 == 1), Math.floor(current.abs ** next.abs)));
+			} else if (!current.negative && next.negative) {
+				current = truncate(new Int("", false, Math.floor(current.abs ** -next.abs)));
+			} else if (!current.negative && !next.negative) {
+				current = truncate(new Int("", false, Math.floor(current.abs ** next.abs)));
+			}
+		} else if (operator == "√") {
+			// next**(1/current)
+			if (next.negative) {
+				if (current.abs == 1 && !current.negative) {
+					current = truncate(new Int("", true, next.abs));
+				} else if (current.abs == 1 && current.negative) {
+					current = truncate(new Int("", true, Math.floor(next.abs ** -1)));
+				} else {
+					current = truncate(new Int("-1"));
+				}
+			} else if (!next.negative && current.negative) {
+				current = truncate(new Int("", false, Math.floor(next.abs ** (-1 / current.abs))));
+			} else if (!next.negative && !current.negative) {
+				current = truncate(new Int("", false, Math.floor(next.abs ** (1 / current.abs))));
+			}
+		}
+	}
+ 
+	console.log(data);
+	console.log(current);
+	return current;
+}
+
 function equals(a, b) {
 	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
 		if (a.abs == b.abs && a.negative == b.negative) {
@@ -54,30 +184,10 @@ function equals(a, b) {
 }
 
 function plus(a, b) {
-	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
-		if (a.negative == b.negative) {
-			return new Int("", a.negative, a.abs + b.abs);
-		} else {
-			var negative = (a.negative && a.abs >= b.abs) || (!a.negative && a.abs < b.abs);
-			var abs = a.abs - b.abs;
-			if (abs < 0) abs = -abs;
-			return new Int("", negative, abs);
-		}
-	}
-	else if (a.constructor.name == "String" || b.constructor.name == "String") {
+	if (a.constructor.name == "String" || b.constructor.name == "String") {
 		return a.toString() + b.toString();
 	}
 	return new Int("-1");
-}
-
-function minus(a, b) {
-	if (a.constructor.name == "Int" && b.constructor.name == "Int") {
-		var negb = new Int("", !b.negative, b.abs);
-		return plus(a, negb);
-	}
-	return new Int("-1");
-	
-	// string minus string: remove first instance of 2nd string from 1st string
 }
 
 function lt(a, b) {
@@ -248,7 +358,7 @@ class Function {
 			if (next_indents > indents) {
 				// this is an if statement. evaluate it and convert to boolean. if it's true, continue forwards; otherwise, skip until we find another line with at most this many indents.
 				last_line_value = eval(this.code[i].substr(indents), false);
-				console.log(this.code[i].substr(indents) + " => " + last_line_value);
+				//console.log(this.code[i].substr(indents) + " => " + last_line_value);
 				var bool_value = new Bool(last_line_value);
 				if (bool_value.value != "true") {
 					var next_i = i + 1;
@@ -267,7 +377,7 @@ class Function {
 			} else {
 				// evaluate it and continue forward
 				last_line_value = eval(this.code[i].substr(indents));
-				console.log(this.code[i].substr(indents) + " => " + last_line_value);
+				//console.log(this.code[i].substr(indents) + " => " + last_line_value);
 			}
 		}
 		return last_line_value;
@@ -303,7 +413,6 @@ function eval(line, canBeEqualsStatement = true) {
 	}
 	if (line.startsWith("print(") && line.endsWith(")")) {
 		var printed_expr = parseExpression(line.substr(6, line.length - 7));
-		console.log(line.substr(6, line.length - 7));
 		document.getElementById('out').innerHTML += printed_expr.toString() + "<br>";
 		evaluated = true;
 		return printed_expr;
@@ -315,7 +424,6 @@ function eval(line, canBeEqualsStatement = true) {
 		// indirect lhs with parentheses
 		while (lhs.startsWith("(") && lhs.endsWith(")")) {
 			var inner = lhs.substring(1, lhs.length - 1)
-			console.log(variables[inner]);
 			if (inner in variables && variables[inner][0] == "string") {
 				lhs = variables[inner][1].value;
 			} else {
@@ -343,8 +451,6 @@ function eval(line, canBeEqualsStatement = true) {
 				if (variables[lhs][1] === undefined || variables[lhs][1].constructor.name != "Function") {
 					variables[lhs][1] = new Function(rhs);
 				}
-				console.log(rhs);
-				console.log(variables[lhs][1]);
 				variables[lhs][1].add(rhs);
 			}
 			evaluated = true;
@@ -363,7 +469,7 @@ function eval(line, canBeEqualsStatement = true) {
 // parse an expression and return its value
 // the result should be one of our objects
 function parseExpression(str) {
-	console.log(str);
+	//console.log(str);
 	if (str.startsWith("(") && str.endsWith(")")) {
 		var inner = str.substring(1, str.length - 1)
 		return parseExpression(inner).parenOperator();
@@ -376,9 +482,6 @@ function parseExpression(str) {
 	} else if (str.indexOf(" + ") > -1) {
 		var [lhs, rhs] = splitStringAround(str, " + ");
 		return plus(parseExpression(lhs), parseExpression(rhs));
-	} else if (str.indexOf(" - ") > -1) {
-		var [lhs, rhs] = splitStringAround(str, " - ");
-		return minus(parseExpression(lhs), parseExpression(rhs));
 	} else if (str.indexOf(" < ") > -1) {
 		var [lhs, rhs] = splitStringAround(str, " < ");
 		return lt(parseExpression(lhs), parseExpression(rhs));
@@ -391,6 +494,9 @@ function parseExpression(str) {
 	// try evaluating the string as a variable/function/builtin
 	if (str in builtins) {
 		return builtins[str]();
+	}
+	if (str.startsWith("MATH ")) {
+		return new Int(MATH(str.substring(5)));
 	}
 	if (str in variables) {
 		var result = variables[str][1];
@@ -458,7 +564,11 @@ function run() {
 					next_i++;
 				}
 				i = next_i - 1;
-				next_indents = count_indents(code[next_i])
+				if (next_i >= code.length) {
+					next_indents = -1;
+				} else {
+					next_indents = count_indents(code[next_i]);
+				}
 			}
 		} else {
 			// evaluate it and continue forward
